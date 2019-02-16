@@ -1,0 +1,268 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+PCA with Reed Canary Grass Functional Traits
+
+Background:
+
+Experiment hypothesis: Have populations of P. arundinacea locally adapted to grow in soils contaminated with salt, copper and zinc?
+Experimental design: Seeds from 4 "source populations" of reed canary grass were collected in the field across a natural to urban gradient. These populations were "natural", "rural", "moderate urban" and "intense urban" and were designated based on surrounding land cover. Individuals from each of these populations were treated with salt addition, copper addition, zinc addition or control for 18 weeks. 4 source populations x 5 genetically identical replicates x 4 treatments = 80 pots. A bunch of functional traits were measured to see if we could see any differences between source population responses and treatment responses. 
+
+```{r}
+#remove everything in global environment
+rm(list=ls(all=TRUE))
+
+#not exactly sure if all of these packages are necessary, these are just the ones I always load
+library(car)
+library(doBy)
+library(data.table)
+library(emmeans)
+library(plyr)
+library(ggplot2)
+library(lsmeans)
+library(nlme)
+library(multcomp)
+library(MASS)
+library(lme4)
+library(vegan)
+library(RColorBrewer)
+require(doBy)
+require(lsmeans)
+
+#Set working directory
+setwd("C:/Users/lmwes/OneDrive/Desktop")
+
+#import data
+pot <- read.csv("Manipulated Pot Level Data.csv")
+
+```
+
+I named the data set "pot" because it contains all variables on a "pot" level. Some of these traits (columns of data) are average values because we took 3 - 10 identical measurements from each pot. These data manipulations were previously done in R and it's easier to keep the naming consistent for this demonstration. 
+
+This data set is huge because it includes functional traits as well as intermediate variables that were used to obtain functional traits. Before we build a correlation matrix, we need to trim our data set to only include the functional traits we're interested in.
+
+```{r}
+#create new data table so nothing happens to the original one housing all of the data
+pot_cor <- data.table(pot, keep.rownames=TRUE)
+
+#eliminate unnecessary columns from big data set
+#these columns represent data that will not go into the PCA analysis
+#pot, block, pop_cat, treatment, height_aug, width_aug, culm_aug, culm_oct, 
+#bg_wet, fr_wet, fr_biomass, num_fr, culm_growth, height_growth, width_growth
+
+#Data that refers to the methods 
+pot_cor[, "rn"] <- NULL
+pot_cor[, "X"] <- NULL
+pot_cor[, "pot"] <- NULL
+pot_cor[, "block"] <- NULL
+pot_cor[, "pop_cat"] <- NULL
+pot_cor[, "treatment"] <- NULL
+#Traits that do not really mean anything/variables used to create final trait list
+pot_cor[, "height_aug"] <- NULL
+pot_cor[, "width_aug"] <- NULL
+pot_cor[, "culm_aug"] <- NULL
+pot_cor[, "culm_oct"] <- NULL
+pot_cor[, "bg_wet"] <- NULL
+pot_cor[, "fr_wet"] <- NULL
+pot_cor[, "fr_biomass"] <- NULL
+pot_cor[, "num_fr"] <- NULL
+pot_cor[, "culm_growth"] <- NULL
+pot_cor[, "height_growth"] <- NULL
+pot_cor[, "width_growth"] <- NULL
+```
+
+We are left with 20 variables. This is still a lot for our relatively small data set (n=80), so we'd like to furthur eliminate variables that are correlated with one another. To view correlation coefficients (value - mean)/standard deviation, create a correlation matrix.
+
+```{r}
+#Create a correlation matrix which shows how correlated each trait is with every other trait
+#I can't totally remember why I used pearson. It was probably something my advisor said, also I don't understand why we'd use different types, so take it with a grain of salt.
+#View will show the matrix in a pop up window, which can be helpful because it's so big
+View(cor(pot_cor, method = c("pearson")))
+```
+
+As a rule of thumb, we can eliminate traits that are highly correlated with one another. Highly correlated is above 0.8. 
+
+```{r}
+#furthur eliminate traits that are correlated with one another
+#belowground biomass and total biomass highly correlated, so eliminated total biomass
+#photosynthesis and conductance highly correlated, so eliminated conductance
+#root mass ratio and root shoot ratio highly correlated, so eliminate root shoot ratio
+#eliminated leaf thickness because it is embedded in SLA and LDMC
+#eliminated culm width because it isn't a meaningful trait in order to simplify the PCA 
+#eliminated fine root dry mass / fine root (fr) because it also isn't a meaningful trait
+
+pot_cor[, "t_biomass"] <- NULL
+pot_cor[, "width_oct"] <- NULL
+pot_cor[, "lt"] <- NULL
+pot_cor[, "cond"] <- NULL
+pot_cor[, "fr"] <- NULL
+pot_cor[, "rsr"] <- NULL
+```
+
+Trimming data is done! Great! Now, double check to make sure everything you want is there and that the correlation values look good (traits are no longer correlated with one another): 
+```{r}
+View(cor(pot_cor, method = c("pearson")))
+```
+
+
+The next step is to run the PCA. Here, I've done it using base R and the vegan package for demonstration. 
+
+
+```{r}
+#BASE R
+
+#run a PCA using base R rather than Vegan
+#scale=TRUE centers and standardizes the data
+
+trait.pca.baseR <- prcomp(pot_cor, scale=TRUE)
+
+#VEGAN
+
+#run a pca
+#the rda function is a pca using the vegan package
+#scale = TRUE centers and scales data
+#na.action = na.fail means the pca will not run with missing data values
+#scaling="sites" is important to make sure a pca run in vegan vs. a pca run in base r have the same loadings results
+  #you want this because a) it's easier to determine how many PC axes you need using the base R pca analysis, but b) it's easier to plot the PCA using the vegan package (there are more options), so it's good practice if the results match one another.
+
+trait.pca.vegan <- rda(pot_cor, scale=TRUE, na.action=na.fail, scaling="sites")
+```
+
+
+###################################################################################################
+
+
+
+How do I find out what my PC axes mean?
+
+```{r}
+#BASE R
+
+#loadings tables for "species" (in this case, "traits")
+#these tables tell you which factors are important on which axes
+#for example, if ag_biomass has the highest number for pc1, variation in ag_biomass is explained by pc1
+#look at absolute values for these, positive and negatives do not matter
+#the $rotation portion indicates we want the loading values parsed out by "species" or "traits"
+
+loadings.traits <- trait.pca.baseR$rotation
+View(loadings.traits)
+
+#loadings for sites
+#note, the only difference here is $x, rather than $rotation. This pulls out "site" or "pot" loading values
+#this set of functions is for pcas run in base r
+loadings.sites <- trait.pca.baseR$x
+View(loadings.sites)
+
+#VEGAN
+
+#to see the loadings for a pca run in vegan, use the scores function
+#scaling = 0 is important to again, make sure the pca in vegan is the same as pca in base r
+#scores will only show you 2 pca axes. Use the choices argument to define which pc axes you see
+#display="species", or "sites". "species" is synomomous with "traits" and "sites" is synomous with "pot"
+
+scores(trait.pca.vegan, display="sites", scaling=0, choices=c(1,2))
+scores(trait.pca.vegan, display ="species", scaling=0, choices=c(1,2))
+```
+
+Note: the results from the Base R loadings tables and from the Vegan loadings tables should match exactly.
+
+Look at the loadings.traits table. The largest values in that table are the traits that are driving the variation on those axes. With respect to this data:
+
+PC Axis 1: Aboveground Biomass (ag_biomass), Belowground biomasss (bg_biomass) and Chlorophyll density (chloro_avg) explain most of the variation
+PC Axis 2: Root Dry Matter Content (rdmc), Root Mass Ratio (rmr) explain most of the variation
+PC Axis 3: Fine root length (rt_length), Fine root diameter (rt_diameter) and specific root length (srl) explain most of the variation
+PC Axis 4: Leaf Dry Matter Content (ldmc) and specific leaf area (sla) explain most of the variation
+PC Axis 5: Photosynthetic rate (photo), Fine root length (rt_length) and specific root length (srl) explain most of the variation
+
+Notice that PC Axis 5 begins to repeat traits that are important. This leads us to our next point. 
+
+
+#####################################################################################################
+
+
+
+How many axes do you need to expalin the appropriate amount of variation?
+
+Broken Stick Method:
+```{r}
+#Broken stick method of figuring out how many pc axes you need
+#this is run using a pca created in base R with prcomp
+#how to interpret results: the # of axes you keep is the # below where the red and black lines cross
+
+bstick(trait.pca.baseR)
+screeplot(trait.pca.baseR, bstick=TRUE, type="lines")
+```
+In this case, you would keep 3 PC axes because the lines cross between 3 and 4.
+
+Eigenvalue Method:
+```{r}
+#Eigenvalue method for determining how many axes to keep
+#this method is run with the pca from vegan package
+#Screeplot of all the PC axes
+#Axes that fall below the line do not explain a meaningful amount of variability
+#the results of this test indicate keeping 4 axes, rather than 3, however, 4 is very close to the purple cut off line
+screeplot(trait.pca.vegan, type = "lines", npcs = 12, main = "Screeplot of Trait PCs")
+abline(h=1, col="purple", lty=5)
+```
+In this case, we would keep 4 axes because the purple line is between 4 and 5. 
+
+Based on the groupings involved in each axis, I decided to interpret 4 axes because the 4th axis explains variation from leaf specific traits, which is missing from the previous 3 axes. 
+
+
+
+
+How do I visualize my data?
+
+Plotting 2 PC axes using the Vegan package:
+
+```{r}
+#plot axis 1 vs axis 2 
+
+#windows will open your pca into a new window, which makes it bigger and easier to look at it closely
+#choices indicates axes 1 and 2
+#scaling = 2 just makes the ordination big. You can experiment with scaling to fit your needs
+#pch allows you to make the points different shapes based on "treatment". 
+#bg allows you to fill in the points with different colors. In this case, my colors are based on source population of plants
+windows() 
+biplot(trait.pca.vegan, type="n", choices=c(1,2), scaling=2)
+with(pot,points(trait.pca.vegan, choices=c(1,2), scaling=2, pch=c(21,22,23,24)[as.factor(treatment)],
+                bg=c("#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C")[as.factor(pop_cat)],cex=1))
+
+ordiellipse(trait.pca.vegan, pot$pop_cat, lty=c(1,2,3,4), lwd=2,
+            scaling=2, kind="se",conf=0.95,choices=c(1,2))
+
+#ordiellipse puts 95% confidence intervals around groups of data. In this case, I'm having the CI's grouped by source population of plants (pop_cat)
+#it's important to note the pot$pop_cat. Pot is my orginal data set, not the correlation matrix, that I'm using to plot confidence intervals around population cateogries.
+
+```
+
+By looking at the circles, you can tell that the solid circle (natural source population) is completely separated from the dotted circle (intense urban source population) along pc axis 1 (biomass). I can also plot the circles based on treatment.
+
+```{r}
+#plot axis 1 vs axis 2 - treatment
+windows()
+biplot(trait.pca.vegan, type="n", choices=c(1,2), scaling=2)
+with(pot,points(trait.pca.vegan, choices=c(1,2), scaling=2, pch=c(21,22,23,24)[as.factor(treatment)],
+                bg=c("#FFFFB2", "#FECC5C", "#FD8D3C", "#E31A1C")[as.factor(pop_cat)],cex=1))
+
+ordiellipse(trait.pca.vegan, pot$treatment, lty=c(1,2,3,4), lwd=2,
+            scaling=2, kind="se",conf=0.95,choices=c(1,2))
+```
+
+
+
+
+
+
+
+
+
+
+
+How do I use the PC axes scores in an analysis? 
+
+
+
+

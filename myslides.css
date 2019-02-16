@@ -1,0 +1,52 @@
+/* Whole document: */
+body{
+  font-family: "Georgia", serif;
+  font-size: 12pt;
+  color: black;
+}
+/* Headers */
+h1{
+    font-size: 36pt;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    color: black;
+}
+
+h2{
+    font-size: 34pt;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    color: black;
+}
+
+h3{
+    font-size: 32pt;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    color: black;
+}
+
+h4{ /* Affects "author" and "date" fields*/
+    font-size: 34pt;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    color: black;
+}
+
+h5{
+    font-size: 34pt;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    color: black;
+}
+
+h6{
+    font-size: 34pt;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    color: black;
+}
+
+hr { 
+  display: block;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  margin-left: auto;
+  margin-right: auto;
+  border-style: inset;
+  border-width: 1px;
+} 

@@ -1,0 +1,128 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+#remove everything in global environment
+rm(list=ls(all=TRUE))
+
+#load necessary packages
+library(vegan)
+library(mgcv)
+library(MASS)
+library(cluster)
+library(labdsv)
+library(nlme)
+
+
+#set working directory
+setwd("C:/Users/lmwes/Box Sync/CLASSES/Multivariate Stats Seminar")
+
+#import data
+oakwood <- read.csv("OakWood1.csv")
+```
+
+First, we'll calculate distances that we'll use for our PCoA. The 2 that I've chosen are euclidean, bray-curtis and sorensen because they are popular and follow Lab 8. In order to use the sorensen distance, you need to install package "labdsv". Additionally, "labdsv" won't run unless you've already loaded the following packages: "mgcv", "MASS", "cluster" and "nlme". 
+
+```{r}
+#change the "sites" column to numeric rather than factor
+oakwood$X <-as.numeric(oakwood$X)
+
+#Euclidean Distance - using base R
+dis.euc <- dist(oakwood, 'euclidean')
+
+#Bray-Curtis - using Vegan
+dis.bray <- vegdist(oakwood, method="bray")
+
+#Sorensen distance - labdsv package
+dis.sor <- dsvdis(oakwood, index="sorensen")
+
+```
+
+Now that we've calculated our distances, let's explore our axes of variation. First, we'll use the pco. function from labdsv. 
+```{r}
+#Calculate the first 10 eigenvalues of the oakwood - euclidean distance matrix
+euc.pco <- pco(dis.euc, k=10)
+
+#Calculate the first 10 eigenvalues of the oakwood - bray-curtis distance matrix
+bray.pco <- pco(dis.bray, k=10)
+
+#Calculate the first 10 eigenvalues of the oakwood - sorensen distance matrix
+sor.pco <- pco(dis.sor, k=10)
+```
+
+Next, we can plot them to get a better sense of how many axes of variation might be useful for interpretation. 
+
+```{r}
+#plot Euclidean distance eigenvalues
+barplot(euc.pco$eig[1:10])
+
+#plot Euclidean distance PCoA
+plot(euc.pco)
+```
+Euclidean distance doesn't work so well with ecological data because it doesn't handle 0's very well. This bar graph would suggest that only 1 axis explains nearly all of the variation in the data. 
+
+When we look at the PCoA, we can see that all of the variation is spread out across axis 1, whereas axis 2 barely shows any variation. Not the ideal way to explain ecological data. 
+
+```{r}
+#plot Bray-Curtis distance eigenvalues
+barplot(bray.pco$eig[1:10])
+
+#plot Bray-Curtis distance PCoA
+plot(bray.pco)
+```
+Bray-curtis distance shows a more meaningful distribution, with variation tapering off after 3 axes.
+
+When looking at the ordination, we can see the data is more spread out and variable along axes 1 and 2.
+
+
+```{r}
+#plot Sorensen distance eigenvalues
+barplot(sor.pco$eig[1:10])
+
+#plot Sorensen distance PCoA
+plot(sor.pco)
+```
+By using sorensen distance, more than 2 axes appear important. This gives us a clustered, non-patterened ordination shape. 
+
+
+How to tell how different the ordinations are:
+We can plot the eigenvalues for each distance ordination on a sigle plot to see differences. 
+
+```{r}
+plot(euc.pco$eig[1:10]/sum(euc.pco$eig[1:10]), type="b", xlab="Axis Number", ylab="Fraction of Sum")
+lines(bray.pco$eig[1:10]/sum(bray.pco$eig[1:10]), type="b", col="purple")
+lines(sor.pco$eig[1:10]/sum(sor.pco$eig[1:10]), type="b", col = "green")
+text(8.0,0.5, 'Euclidean')
+text(8.0,0.4, 'Bray-Curtis', col="purple")
+text(8.0, 0.3, 'Sorensen', col="green")
+```
+
+
+We are able to look at single species distributions in ordination space. 
+```{r}
+plot(euc.pco, title="Corylus cornuta var. californica Euclidean")
+points(euc.pco, oakwood$Coco.s>0)
+
+plot(bray.pco, title="Corylus cornuta var. californica Bray Curtis")
+points(bray.pco, oakwood$Coco.s>0)
+
+plot(sor.pco, title="Corylus cornuta var. californica Sorensen")
+points(sor.pco, oakwood$Coco.s>0)
+```
+This shrub is one of the key distinguishing plant species in the 1st plant communities that John F. Thilenius delimited, however, none of our ordinations show 1 solid group of that plant. Sorensen distance does the best job at grouping it together consistently. 
+
+```{r}
+plot(euc.pco, title="Rhus diversiloba Euclidean")
+points(euc.pco, oakwood$Rhdi>0)
+
+plot(bray.pco, title="Rhus diversiloba Bray Curtis")
+points(bray.pco, oakwood$Rhdi>0)
+
+plot(sor.pco, title="Rhus diversiloba Sorensen")
+points(sor.pco, oakwood$Rhdi>0)
+```
+

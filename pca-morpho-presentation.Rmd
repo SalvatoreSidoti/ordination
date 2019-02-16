@@ -1,0 +1,342 @@
+---
+title: 'Principal Component Analysis: An Introduction with Examples in R'
+author: "Salvatore A. Sidoti"
+date: "`r Sys.Date()`"
+output:
+  ioslides_presentation:
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+if (!require("devtools")) install.packages("devtools", dependencies = TRUE)
+if (!require("pacman")) install.packages("pacman", dependencies = TRUE)
+if (!require("plyr")) install.packages("plyr", dependencies = TRUE)
+if (!require("dplyr")) install.packages("dplyr", dependencies = TRUE)
+if (!require("psych")) install.packages("psych", dependencies = TRUE)
+if (!require("car")) install.packages("car", dependencies = TRUE)
+if (!require("MASS")) install.packages("MASS", dependencies = TRUE)
+if (!require("kableExtra")) install.packages("kableExtra", dependencies = TRUE)
+if (!require("rmarkdown")) install.packages("rmarkdown", dependencies = TRUE)
+if (!require("knitr")) install.packages("knitr", dependencies = TRUE)
+if (!require("pastecs")) install.packages("pastecs", dependencies = TRUE)
+if (!require("paran")) install.packages("paran", dependencies = TRUE)
+if (!require("ggplot2")) install.packages("ggplot2", dependencies = TRUE)
+if (!require("gridExtra")) install.packages("gridExtra", dependencies = TRUE)
+if (!require("ggrepel")) install.packages("ggrepel", dependencies = TRUE)
+if (!require("ggpubr")) install.packages("ggpubr", dependencies = TRUE)
+if (!require("ggbiplot")) install_github("vqv/ggbiplot")
+
+library(pacman)
+
+p_load(devtools, plyr, dplyr, psych, car, MASS, kableExtra, rmarkdown, knitr,
+       pastecs, paran, pcaMethods, ggplot2, gridExtra, ggrepel, ggpubr, ggbiplot)
+```
+
+<style>
+
+pre {
+  font-size: 22px;
+}
+
+</style>
+
+## PCA
+- Principle component analysis distributes the variation in a multivariate dataset across *components*.
+- Visualize patterns that would not be apparent
+- Linear algebra is at the heart of the PCA
+- This discussion will be light on mathematical theory
+
+# Accomplishing the PCA *Manually*
+
+## Accomplishing the PCA *Manually*
+- Goal for the *manual* PCA
+- Become acquainted with the terminology and concepts in PCA
+- Better prepared to defend your analysis
+
+# Motivating Example - Wolf Spider Morphometrics
+
+# {.fullslide}
+```{r echo=FALSE, fig.align="center", fig.width=14, fig.height=14}
+include_graphics("morpho.jpg")
+```
+
+## Descriptive Statistics
+```{r echo=FALSE}
+# Load the full data set
+load("morpho_complete.Rdata")
+
+# Eliminate factor variables & untransformed weights from full dataset
+morpho <- morpho_complete[,-c(1,2,6)]
+
+morpho.stats <- round(stat.desc(morpho, basic = FALSE), digits = 3)
+
+kable(morpho.stats) %>%
+  kable_styling(position = "left", font_size = 30) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:5, width = "3em") %>%
+  row_spec(0, font_size = 30)
+```
+
+#
+```{r fig.align="center", echo=FALSE, out.width="100%"}
+pairs.panels(
+  morpho,
+  main = "Wolf Spider Morphometrics - Correlation Summary",
+  gap = 0, # set to zero for no gap between plot panels
+  lm = TRUE, # draw linear regression lines for pairs
+  stars = TRUE, # display significance
+  bg = c("red", "blue")[morpho_complete$sex], # color based on sex 
+  pch = 21) # data point shape
+```
+
+# Covariance or Correlation?
+
+## Covariance or Correlation?
+- Are the metrics in our dataset are *like* or *mixed*?
+- Like: covariance matrix with mean-centering
+- Mixed: correlation matrix with unit variance
+- Becomes essential when using the built-in PCA functions in R
+
+# Find the Eigenvalues & Eigenvectors
+
+## Calculating Eigenvectors
+```{r echo=TRUE, message=FALSE}
+standardize <- function(x) {(x - mean(x))/sd(x)}
+
+# Eliminate factor variables & untransformed weights
+my.scaled.data <- as.data.frame(apply(morpho, 2, standardize))
+
+# Calculate correlation matrix
+my.cor <- cor(my.scaled.data)
+
+# Save the eigenvalues of the correllation matrix
+my.eigen <- eigen(my.cor)
+
+# Rename matrix rows and columns for easier interpretation
+rownames(my.eigen$vectors) <- c("interoc", "cwidth",
+                                "clength", "T.weight")
+colnames(my.eigen$vectors) <- c("PC1", "PC2", "PC3", "PC4")
+```
+
+## Calculating Eigenvectors
+```{r echo=FALSE, message=FALSE}
+eigen.table <- as.data.frame(my.eigen$vectors) %>%
+  round(., digits = 4)
+kable(eigen.table) %>%
+  kable_styling(position = "center", font_size = 38) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2:5, width = "4em") %>%
+  row_spec(0, font_size = 38)
+```
+
+## Calculating Eigenvalues
+```{r echo=FALSE, message=FALSE}
+eigen.values <- data.frame(PC = c("PC1", "PC2", "PC3", "PC4"),
+                           eigenvalues = round(my.eigen$values, digits = 4))
+kable(eigen.values) %>%
+ kable_styling(position = "center", font_size = 38) %>%
+  column_spec(1, bold = TRUE) %>%
+  column_spec(2, width = "4em") %>%
+  row_spec(0, font_size = 38)
+```
+
+## Calculating Eigenvalues {.larger}
+Sum of the eigenvalues = total variance of the scaled data
+
+```{r echo=TRUE}
+sum(my.eigen$values)
+
+sum(
+  var(my.scaled.data[,1]),
+  var(my.scaled.data[,2]),
+  var(my.scaled.data[,3]),
+  var(my.scaled.data[,4]))
+```
+
+# Amount of Variation Captured by the PCs
+
+## Variation Captured by the PCs
+```{r echo=TRUE}
+pc1.var <- 100*round(my.eigen$values[1]/
+                       sum(my.eigen$values), digits = 3)
+pc2.var <- 100*round(my.eigen$values[2]/
+                       sum(my.eigen$values), digits = 3)
+pc3.var <- 100*round(my.eigen$values[3]/
+                       sum(my.eigen$values), digits = 3)
+pc4.var <- 100*round(my.eigen$values[4]/
+                       sum(my.eigen$values), digits = 3)
+
+pc <- data.frame(PC = c("PC1", "PC2", "PC3", "PC4"),
+                 Percentage = c(pc1.var, pc2.var,
+                                pc3.var, pc4.var))
+```
+
+## Variation Captured by the PCs
+```{r echo=FALSE}
+kable(pc) %>%
+  kable_styling(position = "center", font_size = 38) %>%
+  column_spec(1, bold = TRUE) %>%
+  row_spec(0, font_size = 38)
+```
+
+## Variation Captured by the PCs
+The total variation should sum to ~100% depending on rounding error:
+```{r}
+sum(pc1.var, pc2.var, pc3.var, pc4.var)
+```
+
+# What are PCA "scores"?
+
+## What are PCA "scores"?
+- Express the loadings and scaled data as matrices, then multiply them together
+- The result is a new matrix which expresses the data in terms of the PCs
+- These are the PCA *scores*
+
+## What are PCA "scores"?
+```{r echo=TRUE}
+loadings <- my.eigen$vectors
+my.scaled.matrix <- as.matrix(my.scaled.data)
+# the function %*% is matrix multiplication
+scores <- my.scaled.matrix %*% loadings
+sd <- sqrt(my.eigen$values)
+rownames(loadings) <- colnames(my.scaled.data)
+```
+
+## What are PCA "scores"?
+```{r}
+head.scores <- head(scores) %>%
+  round(., digits = 4)
+kable(head.scores) %>%
+ kable_styling(position = "center", font_size = 38) %>%
+  column_spec(1:4, width = "4em") %>%
+  row_spec(0, font_size = 38)
+```
+
+# PCA with Native R Functions
+
+## PCA with Native R Functions
+The function `prcomp` is the primary tool for PCA in base R
+```{r echo=TRUE}
+pca_morpho <- prcomp(morpho, center = TRUE, scale. = TRUE)
+
+# Show the variables in the class "prcomp"
+ls(pca_morpho)
+```
+
+## Summary output of the PCA
+```{r echo=TRUE}
+pca_summary <- summary(pca_morpho)$importance %>%
+  as.data.frame() %>%
+  round(., digits = 3)
+```
+
+## Summary output of the PCA
+```{r echo=FALSE}
+kable(pca_summary) %>%
+ kable_styling(position = "center", font_size = 35) %>%
+  column_spec(1, width = "12em") %>%
+  column_spec(2:4, width = "3em") %>%
+  row_spec(0, font_size = 35)
+```
+
+## Orthogonality of PCs
+```{r echo=FALSE, fig.align = "center", out.width="100%"}
+pairs.panels(
+  pca_morpho$x,
+  main = "PCA Correlation Summary",
+  gap = 0, # set to zero for no gap between plot panels
+  lm = TRUE, # draw linear regression lines for pairs
+  stars = TRUE, # display significance
+  bg = c("red", "blue")[morpho_complete$sex], # color based on sex 
+  pch = 21) # data point shape
+```
+
+## Biplot
+```{r echo=FALSE, fig.align="center", out.width="100%", message=FALSE}
+# Plot without ID labels
+g <- ggbiplot(pca_morpho,
+              obs.scale = 1,
+              var.scale = 1,
+              groups = morpho_complete$sex,
+              ellipse = TRUE,
+              circle = FALSE,
+              # draw ellipse around points (+/-) 1 standard deviation
+              ellipse.prob = 0.68) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = "horizontal", legend.position = "top", aspect.ratio = 1)
+
+# Plot with ID labels
+h <- ggbiplot(pca_morpho,
+              obs.scale = 1,
+              var.scale = 1,
+              groups = morpho_complete$sex,
+              ellipse = TRUE,
+              circle = FALSE,
+              # draw ellipse around points (+/-) 1 standard deviation
+              ellipse.prob = 0.68) +
+  scale_color_discrete(name = '') +
+  theme(legend.direction = "horizontal", legend.position = "top", aspect.ratio = 1) +
+  geom_text_repel(aes(label = morpho_complete$id))
+
+figure <- ggarrange(g, h, ncol = 2)
+
+annotate_figure(figure,
+               top = text_grob("PCA Biplots - Morphometric Data",
+                               color = "black", face = "bold", size = 14),fig.lab.face = "bold")
+```
+
+# How many PCs explain "enough" variation?
+
+## Kaiser Criterion
+- If an eigenvalue associated with a PC is $\small >1$, then retain that component
+- Compute the eigenvalues from the PCA: square the SDs in the `prcomp` object.
+
+```{r}
+pca_morpho$sdev ^ 2
+```
+
+## Parallel Analysis
+Designed to reduce the subjectivity of interpreting a *scree plot*
+
+```{r echo=FALSE, out.width="100%"}
+screeplot(pca_morpho, type = "line", main = "Scree Plot - Morphometric Data")
+```
+
+## Parallel Analysis
+- Simulation-based method
+- Generates thousands of data sets analogous to the "real" dataset
+- Retain the number of factors that possess eigenvalues larger than the simulated data
+
+## Parallel Analysis
+```{r echo=FALSE, fig.align="center", out.width="100%", message=FALSE, warning=FALSE}
+paran(morpho, iterations = 5000, centile = 0, quietly = TRUE, 
+    status = FALSE, all = TRUE, cfa = TRUE, graph = TRUE, color = TRUE, 
+    col = c("black", "red", "blue"), lty = c(1, 2, 3), lwd = 1, legend = TRUE, 
+    file = "", width = 640, height = 640, grdevice = "png", seed = 0)
+```
+
+# PCA on the Oak Woods Dataset - Robust PCA
+
+## PCA: Oak Woods Dataset
+```{r echo=FALSE, fig.align="center", out.width="100%", message=FALSE, warning=FALSE}
+load("OakWoods.Rdata")
+boxplot(oak2)
+```
+
+## PCA: Oak Woods Dataset
+```{r fig.align="center", out.width="100%", message=FALSE, warning=FALSE}
+# Save data frame as a matrix and eliminate the first column (character)
+oak.matrix <- as.matrix(oak2[,-1])
+pca_oak_robust <- pca(oak.matrix, method = "robustPca", nPcs = 27,
+                      center = TRUE, scaled = TRUE)
+slplot(pca_oak_robust)
+```
+
+## PCA: Oak Woods Dataset
+In Summary, a PCA of any type may not be an appropriate statistical approach for this dataset
+
+# Questions?
